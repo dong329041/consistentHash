@@ -10,7 +10,7 @@ import (
 
 var (
 	DefaultVirtualCubes = 128
-	ErrEmptyCircle      = errors.New("empty hash ring")
+	ErrEmptyHashRing    = errors.New("empty hash ring")
 )
 
 // Implement sort interface
@@ -134,7 +134,7 @@ func (c *HashRing) GetNode(name string) (node string, err error) {
 	defer c.RUnlock()
 
 	if len(c.ring) == 0 {
-		return "", ErrEmptyCircle
+		return "", ErrEmptyHashRing
 	}
 	key := c.generateHash(name)
 	index := c.search(key)
