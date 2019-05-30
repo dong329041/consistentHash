@@ -14,14 +14,14 @@ func checkEqual(num, expected int, t *testing.T) {
 }
 
 func TestNewHashRing(t *testing.T) {
-	r := NewHashRing()
+	r := InitHashRing()
 	if r == nil {
-		t.Error("NewHashRing failed.")
+		t.Error("InitHashRing failed.")
 	}
 }
 
 func TestHashRing_AddNode(t *testing.T) {
-	r := NewHashRing()
+	r := InitHashRing()
 	r.AddNode("192.168.1.10", 1)
 	checkEqual(len(r.ring), DefaultVirtualCubes, t)
 	checkEqual(len(r.sortedRing), DefaultVirtualCubes, t)
@@ -31,18 +31,16 @@ func TestHashRing_AddNode(t *testing.T) {
 }
 
 func TestSetCubeNumber(t *testing.T) {
-	oldVirtualCubes := DefaultVirtualCubes
-	SetCubeNumber(40)
-	checkEqual(DefaultVirtualCubes, 40, t)
+	r := InitHashRing()
+	r.SetCubeNumber(40)
+	checkEqual(r.numberOfCubes, 40, t)
 
-	r := NewHashRing()
 	r.AddNode("192.168.1.10", 1)
 	checkEqual(len(r.ring), 40, t)
-	SetCubeNumber(oldVirtualCubes)
 }
 
 func TestHashRing_AddNodes(t *testing.T) {
-	r := NewHashRing()
+	r := InitHashRing()
 	Nodes := make(map[string]int)
 	for i := 0; i < 10; i++ {
 		ip := "192.168.1." + strconv.Itoa(i+1)
@@ -57,7 +55,7 @@ func TestHashRing_AddNodes(t *testing.T) {
 }
 
 func TestHashRing_RemoveNode(t *testing.T) {
-	r := NewHashRing()
+	r := InitHashRing()
 	r.AddNode("192.168.1.10", 1)
 	r.RemoveNode("192.168.1.10")
 	checkEqual(len(r.ring), 0, t)
@@ -75,7 +73,7 @@ func TestHashRing_RemoveNode(t *testing.T) {
 }
 
 func TestHashRing_Members(t *testing.T) {
-	r := NewHashRing()
+	r := InitHashRing()
 	Nodes := make(map[string]int)
 	for i := 0; i < 10; i++ {
 		ip := "192.168.1." + strconv.Itoa(i+1)
@@ -105,7 +103,7 @@ func TestHashRing_GetNode(t *testing.T) {
 		{"key5", "192.168.1.3"},
 	}
 
-	r := NewHashRing()
+	r := InitHashRing()
 	Nodes := make(map[string]int)
 	for i := 0; i < 10; i++ {
 		ip := "192.168.1." + strconv.Itoa(i+1)
@@ -136,7 +134,7 @@ func TestHashRing_GetNode(t *testing.T) {
 }
 
 func TestHashRing_GetNodes(t *testing.T) {
-	r := NewHashRing()
+	r := InitHashRing()
 	Nodes := make(map[string]int)
 	for i := 0; i < 10; i++ {
 		ip := "192.168.1." + strconv.Itoa(i+1)
@@ -181,7 +179,7 @@ func TestHashRing_GetNodes(t *testing.T) {
 }
 
 func TestHashRing_Dispersion(t *testing.T) {
-	r := NewHashRing()
+	r := InitHashRing()
 	Nodes := make(map[string]int)
 	for i := 0; i < 10; i++ {
 		ip := "192.168.1." + strconv.Itoa(i+1)
