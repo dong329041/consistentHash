@@ -9,8 +9,8 @@ import (
 )
 
 var (
+	GHashRing           *HashRing
 	DefaultVirtualCubes = 128
-	ErrEmptyHashRing    = errors.New("empty hash ring")
 )
 
 // Implement sort interface
@@ -35,134 +35,153 @@ type HashRing struct {
 	sync.RWMutex
 }
 
-func NewHashRing() *HashRing {
-	return &HashRing{
+func InitHashRing() *HashRing {
+	GHashRing = &HashRing{
 		ring:          make(map[uint32]string),
 		members:       make(map[string]bool),
 		weights:       make(map[string]int),
 		numberOfCubes: DefaultVirtualCubes,
 	}
+	return GHashRing
+}
+
+func GetHashRing() *HashRing {
+	if GHashRing != nil {
+		return GHashRing
+	}
+	GHashRing = &HashRing{
+		ring:          make(map[uint32]string),
+		members:       make(map[string]bool),
+		weights:       make(map[string]int),
+		numberOfCubes: DefaultVirtualCubes,
+	}
+	return GHashRing
 }
 
 // Set the number of virtual cubes per node
-func SetCubeNumber(num int) (err error) {
+// Notice: SetCubeNumber must be called before AddNode or AddNodes
+func (r *HashRing) SetCubeNumber(num int) (err error) {
+	if len(GHashRing.members) != 0 {
+		err = errors.New("nodes already exist in the ring, modify cube number is not allowed")
+		return
+	}
 	if num <= 0 {
 		err = errors.New("num must be more than 0, suggest more than 32")
 		return
 	}
-	DefaultVirtualCubes = num
+	r.numberOfCubes = num
 	err = nil
 	return
 }
 
 // Get the real nodes in the consistent hash ring
-func (c *HashRing) Members() []string {
-	c.RLock()
-	defer c.RUnlock()
+func (r *HashRing) Members() []string {
+	r.RLock()
+	defer r.RUnlock()
 
 	var m []string
-	for k := range c.members {
+	for k := range r.members {
 		m = append(m, k)
 	}
 	return m
 }
 
 // Generate key based on node ip and cube index
-func (c *HashRing) generateKey(ip string, i int) string {
+func (r *HashRing) generateKey(ip string, i int) string {
 	return ip + "#" + strconv.Itoa(i)
 }
 
 // Generate hash value based on the above key
-func (c *HashRing) generateHash(key string) uint32 {
+func (r *HashRing) generateHash(key string) uint32 {
 	return crc32.ChecksumIEEE([]byte(key))
 }
 
 // AddNode: add a node in the consistent hash ring.
-func (c *HashRing) AddNode(ip string, weight int) {
-	c.Lock()
-	defer c.Unlock()
+func (r *HashRing) AddNode(ip string, weight int) {
+	r.Lock()
+	defer r.Unlock()
 
 	if weight <= 0 {
 		weight = 1
 	}
-	for i := 0; i < c.numberOfCubes*weight; i++ {
-		c.ring[c.generateHash(c.generateKey(ip, i))] = ip
+	for i := 0; i < r.numberOfCubes*weight; i++ {
+		r.ring[r.generateHash(r.generateKey(ip, i))] = ip
 	}
-	c.members[ip] = true
-	c.weights[ip] = weight
+	r.members[ip] = true
+	r.weights[ip] = weight
 
-	c.updateSortedRing()
+	r.updateSortedRing()
 }
 
 // AddNodes: add multiple nodes at once
 // Param: map, key is real node ip, value is this node's weight
-func (c *HashRing) AddNodes(ipWeight map[string]int) {
-	c.Lock()
-	defer c.Unlock()
+func (r *HashRing) AddNodes(ipWeight map[string]int) {
+	r.Lock()
+	defer r.Unlock()
 
 	for ip, weight := range ipWeight {
 		if weight <= 0 {
 			weight = 1
 		}
-		for i := 0; i < c.numberOfCubes*weight; i++ {
-			c.ring[c.generateHash(c.generateKey(ip, i))] = ip
+		for i := 0; i < r.numberOfCubes*weight; i++ {
+			r.ring[r.generateHash(r.generateKey(ip, i))] = ip
 		}
-		c.members[ip] = true
-		c.weights[ip] = weight
+		r.members[ip] = true
+		r.weights[ip] = weight
 	}
 
-	c.updateSortedRing()
+	r.updateSortedRing()
 }
 
 // RemoveNode: removes a node from the consistent hash ring.
-func (c *HashRing) RemoveNode(elt string) {
-	c.Lock()
-	defer c.Unlock()
+func (r *HashRing) RemoveNode(elt string) {
+	r.Lock()
+	defer r.Unlock()
 
-	weight := c.weights[elt]
-	for i := 0; i < c.numberOfCubes*weight; i++ {
-		delete(c.ring, c.generateHash(c.generateKey(elt, i)))
+	weight := r.weights[elt]
+	for i := 0; i < r.numberOfCubes*weight; i++ {
+		delete(r.ring, r.generateHash(r.generateKey(elt, i)))
 	}
-	delete(c.members, elt)
-	delete(c.weights, elt)
-	c.updateSortedRing()
+	delete(r.members, elt)
+	delete(r.weights, elt)
+	r.updateSortedRing()
 }
 
 // GetNode returns a node close to where name hashes to in the ring.
-func (c *HashRing) GetNode(name string) (node string, err error) {
-	c.RLock()
-	defer c.RUnlock()
+func (r *HashRing) GetNode(name string) (node string, err error) {
+	r.RLock()
+	defer r.RUnlock()
 
-	if len(c.ring) == 0 {
-		return "", ErrEmptyHashRing
+	if len(r.ring) == 0 {
+		return "", errors.New("empty hash ring")
 	}
-	key := c.generateHash(name)
-	index := c.search(key)
-	node = c.ring[c.sortedRing[index]]
+	key := r.generateHash(name)
+	index := r.search(key)
+	node = r.ring[r.sortedRing[index]]
 	err = nil
 	return
 }
 
 // GetN returns the N closest distinct real nodes to the name input in the ring.
-func (c *HashRing) GetNodes(name string, n int) (nodes []string, err error) {
-	c.RLock()
-	defer c.RUnlock()
+func (r *HashRing) GetNodes(name string, n int) (nodes []string, err error) {
+	r.RLock()
+	defer r.RUnlock()
 
 	err = nil
-	if len(c.ring) == 0 {
+	if len(r.ring) == 0 {
 		nodes = nil
 		return
 	}
 
-	memberCount := len(c.Members())
+	memberCount := len(r.Members())
 	if int64(memberCount) < int64(n) {
 		n = int(memberCount)
 	}
 
 	// get the first node
-	key := c.generateHash(name)
-	i := c.search(key)
-	elem := c.ring[c.sortedRing[i]]
+	key := r.generateHash(name)
+	i := r.search(key)
+	elem := r.ring[r.sortedRing[i]]
 	nodes = append(nodes, elem)
 	if len(nodes) == n {
 		return
@@ -171,10 +190,10 @@ func (c *HashRing) GetNodes(name string, n int) (nodes []string, err error) {
 	// get the rest of the nodes
 	start := i
 	for i = start + 1; i != start; i++ {
-		if i >= len(c.sortedRing) {
+		if i >= len(r.sortedRing) {
 			i = 0
 		}
-		elem = c.ring[c.sortedRing[i]]
+		elem = r.ring[r.sortedRing[i]]
 		if !sliceHasMember(nodes, elem) {
 			nodes = append(nodes, elem)
 		}
@@ -187,25 +206,25 @@ func (c *HashRing) GetNodes(name string, n int) (nodes []string, err error) {
 }
 
 // search: find the cube of key's hash value clockwise
-func (c *HashRing) search(key uint32) (index int) {
+func (r *HashRing) search(key uint32) (index int) {
 	compareFunc := func(x int) bool {
-		return c.sortedRing[x] > key
+		return r.sortedRing[x] > key
 	}
-	index = sort.Search(len(c.sortedRing), compareFunc)
-	if index >= len(c.sortedRing) {
+	index = sort.Search(len(r.sortedRing), compareFunc)
+	if index >= len(r.sortedRing) {
 		index = 0
 	}
 	return
 }
 
 // updateSortedRing: when hash ring is change, update sortedRing
-func (c *HashRing) updateSortedRing() {
+func (r *HashRing) updateSortedRing() {
 	hashes := uintArray{}
-	for k := range c.ring {
+	for k := range r.ring {
 		hashes = append(hashes, k)
 	}
 	sort.Sort(hashes)
-	c.sortedRing = hashes
+	r.sortedRing = hashes
 }
 
 // sliceHasMember: judge whether the member is include in the slice
